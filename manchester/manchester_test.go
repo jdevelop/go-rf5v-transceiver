@@ -5,6 +5,7 @@ import (
 	"github.com/magiconair/properties/assert"
 	"time"
 	"fmt"
+	"sync"
 )
 
 const bps = 1000
@@ -65,7 +66,10 @@ func TestReadWriteSimpleData(t *testing.T) {
 		ch <- bit
 	}
 
+	var wait sync.WaitGroup
+	wait.Add(1)
 	go func() {
+		defer wait.Done()
 		for {
 			select {
 			case bit, ok := <-ch:
@@ -100,6 +104,7 @@ func TestReadWriteSimpleData(t *testing.T) {
 	}
 
 	close(ch)
+	wait.Wait()
 
 	assert.Equal(t, recv, dataValue)
 
@@ -123,7 +128,10 @@ func TestReadWriteArray(t *testing.T) {
 		bitIdx++
 	}
 
+	var wait sync.WaitGroup
+	wait.Add(1)
 	go func() {
+		defer wait.Done()
 		for {
 			bit, ok := <-ch
 			dt := time.Now().UnixNano()
@@ -150,6 +158,7 @@ func TestReadWriteArray(t *testing.T) {
 	}
 
 	close(ch)
+	wait.Wait()
 
 	assert.Equal(t, recv, src)
 
@@ -170,7 +179,10 @@ func TestReadFrameRaw(t *testing.T) {
 		dest.ReadBit(bit)
 	}
 
+	var wait sync.WaitGroup
+	wait.Add(1)
 	go func() {
+		defer wait.Done()
 		for {
 			bit, ok := <-pinChannel
 			if !ok {
@@ -193,6 +205,9 @@ func TestReadFrameRaw(t *testing.T) {
 			})
 		}
 	}
+
+	close(pinChannel)
+	wait.Wait()
 
 	assert.Equal(t, dest.Preamble, byte(155), "Preamble failed")
 	assert.Equal(t, dest.Size, byte(11), "Size failed")
@@ -221,7 +236,10 @@ func TestReadWriteFrame(t *testing.T) {
 		dest.ReadBit(bit)
 	}
 
+	var wait sync.WaitGroup
+	wait.Add(1)
 	go func() {
+		defer wait.Done()
 		for {
 			bit, ok := <-pinChannel
 			if !ok {
@@ -243,6 +261,7 @@ func TestReadWriteFrame(t *testing.T) {
 	})
 
 	close(pinChannel)
+	wait.Wait()
 
 	assert.Equal(t, dest.Preamble, byte(155), "Preamble failed")
 	assert.Equal(t, dest.Size, src.Size, "Size failed")
