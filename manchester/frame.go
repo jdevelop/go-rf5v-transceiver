@@ -4,14 +4,14 @@ import (
 	"hash/crc32"
 )
 
-type Stage int8
+type Stage string
 
 const (
-	Preamble Stage = iota
-	Size
-	Data
-	Checksum
-	Done
+	Preamble Stage = "preamble"
+	Size     Stage = "size"
+	Data     Stage = "data"
+	Checksum Stage = "checksum"
+	Done     Stage = "done"
 )
 
 type dataFrame struct {
@@ -25,7 +25,7 @@ type dataFrame struct {
 	sizeBit     uint8
 	dataBit     uint16
 	dataBits    uint16
-	checksumBit uint16
+	checksumBit uint8
 	updateBitF  updateBit
 }
 
@@ -47,8 +47,8 @@ func dataF(df *dataFrame, bit bool) updateBit {
 	return df.updateBitF
 }
 
-func doneF(*dataFrame, bool) updateBit {
-	return nil
+func doneF(df *dataFrame, _ bool) updateBit {
+	return df.updateBitF
 }
 
 func checksumF(df *dataFrame, bit bool) updateBit {
@@ -125,25 +125,22 @@ func (r *dataFrame) ReadBit(bit bool) bool {
 	}
 }
 
-type WriterF func(bool)
+type BitWriter func(bool)
 
-func byteN(data uint32, idx uint) byte {
-	shift := idx * 8
-	return byte((data & (0xFF << shift)) >> shift)
-}
+func (r *dataFrame) WriteFrame(f BitWriter) {
+	size := r.Size + 6 // preamble + size byte + data + checksum
+	dst := make([]byte, size)
+	dst[0] = r.Preamble
+	dst[1] = r.Size
+	copy(dst[2:], r.Data)
+	dst[size-4] = byte((r.Checksum & 0xFF000000) >> 24)
+	dst[size-3] = byte((r.Checksum & 0xFF0000) >> 16)
+	dst[size-2] = byte((r.Checksum & 0xFF00) >> 8)
+	dst[size-1] = byte(r.Checksum & 0xFF)
 
-func (r *dataFrame) WriteFrame(f WriterF) {
-	byteWriter := func(src byte) {
-		for i := 7; i > -1; i-- {
-			f(src&byte(1<<uint(i)) > 0)
+	for _, v := range dst {
+		for i := 7; i >= 0; i-- {
+			f(v&byte(1<<uint(i)) > 0)
 		}
-	}
-	byteWriter(r.Preamble)
-	byteWriter(r.Size)
-	for _, d := range r.Data {
-		byteWriter(d)
-	}
-	for i := 3; i >= 0; i-- {
-		byteWriter(byteN(r.Checksum, uint(i)))
 	}
 }

@@ -6,18 +6,18 @@ import (
 
 type Signal func(bool)
 
-type Edge int
+type Edge uint8
 
 const (
-	Down = iota
+	Down Edge = iota
 	Up
 )
 
 type Manchester struct {
-	signalT          time.Duration
-	prevBit          bool
-	lastEdgeChangeNs int64
-	Sensitivity      int64
+	SignalT           time.Duration
+	prevBit           bool
+	lastPeriodStartNs int64
+	Sensitivity       int64
 }
 
 func (m *Manchester) WriteBit(bit bool, writer Signal) {
@@ -25,55 +25,72 @@ func (m *Manchester) WriteBit(bit bool, writer Signal) {
 		if m.prevBit {
 			writer(false)
 		}
-		time.Sleep(m.signalT)
-		writer(true)
-		time.Sleep(m.signalT)
 		m.prevBit = true
+		time.Sleep(m.SignalT)
+		writer(true)
+		time.Sleep(m.SignalT)
 	} else {
 		if !m.prevBit {
 			writer(true)
 		}
-		time.Sleep(m.signalT)
-		writer(false)
-		time.Sleep(m.signalT)
 		m.prevBit = false
+		time.Sleep(m.SignalT)
+		writer(false)
+		time.Sleep(m.SignalT)
 	}
 }
 
 func signalDuration(currentTimeNs int64, m *Manchester) int64 {
-	if m.lastEdgeChangeNs == -1 {
+	if m.lastPeriodStartNs == -1 {
 		return 0
 	} else {
-		return currentTimeNs - m.lastEdgeChangeNs
+		return currentTimeNs - m.lastPeriodStartNs
 	}
 }
 
 func intervalMultiplierRounded(m *Manchester, currentTimeNs int64) int {
 	duration := signalDuration(currentTimeNs, m)
-	ns := m.signalT.Nanoseconds()
+	ns := m.SignalT.Nanoseconds()
 	dur := int(1 + (duration-m.Sensitivity)/ns)
 	return dur
 }
 
 func (m *Manchester) ReadBit(edge Edge, currentTimeNs int64, callback Signal) {
-	interval := intervalMultiplierRounded(m, currentTimeNs)
+
+	updater := func(s bool) {
+		callback(s)
+		m.lastPeriodStartNs = currentTimeNs - m.SignalT.Nanoseconds()
+	}
+
+	fsm := func(s bool) {
+		if m.lastPeriodStartNs == -1 {
+			updater(s)
+		} else {
+			interval := intervalMultiplierRounded(m, currentTimeNs)
+			if interval == 2 {
+				m.lastPeriodStartNs = currentTimeNs
+			} else if interval == 1 || interval == 3 {
+				updater(s)
+			} else {
+				m.lastPeriodStartNs = -1
+			}
+		}
+	}
+
 	switch edge {
 	case Up:
-		if m.lastEdgeChangeNs == -1 || interval == 2 {
-			callback(true)
-			m.lastEdgeChangeNs = currentTimeNs
-		}
+		fsm(true)
 	case Down:
-		if m.lastEdgeChangeNs == -1 || interval == 2 {
-			callback(false)
-			m.lastEdgeChangeNs = currentTimeNs
-		}
+		fsm(false)
 	}
 }
 
-func NewManchesterDriver(transferSpeed int64, sensitivity int64) (m Manchester) {
-	m.signalT = time.Duration(1000000000/transferSpeed/4) * time.Nanosecond
-	m.lastEdgeChangeNs = -1
-	m.Sensitivity = sensitivity
+const PrecisionNs = int64(time.Second / time.Nanosecond)
+
+func NewManchesterDriver(transferSpeed int64) (m Manchester) {
+	m.SignalT = time.Duration(PrecisionNs/transferSpeed/2) * time.Nanosecond
+	m.lastPeriodStartNs = -1
+	m.Sensitivity = int64(float64(m.SignalT) * 0.6)
+	m.prevBit = false
 	return m
 }
