@@ -118,7 +118,8 @@ func BuildDataFrame(data []byte) dataFrame {
 }
 
 func (r *dataFrame) ReadBit(bit bool) bool {
-	if r.updateBitF(r, bit) == nil {
+	r.updateBitF(r, bit)
+	if r.Stage == Done {
 		return true
 	} else {
 		return false
