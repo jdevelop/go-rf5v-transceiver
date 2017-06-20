@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-const bps = 1500
+const bps = 1000
 
 func TestDecoding(t *testing.T) {
 	m := NewManchesterDriver(bps)
@@ -172,7 +172,7 @@ func TestReadFrameRaw(t *testing.T) {
 
 	pinChannel := make(chan bool)
 
-	testData := []byte{155, 11, 72, 69, 76, 76, 79, 32, 87, 79, 82, 76, 68, 135, 229, 134, 91}
+	testData := []byte{183, 123, 239, 207, 11, 72, 69, 76, 76, 79, 32, 87, 79, 82, 76, 68, 135, 229, 134, 91}
 
 	dest := NewDataFrame()
 
@@ -210,7 +210,7 @@ func TestReadFrameRaw(t *testing.T) {
 	close(pinChannel)
 	wait.Wait()
 
-	assert.Equal(t, dest.Preamble, byte(155), "Preamble failed")
+	assert.Equal(t, dest.Preamble, PreambleValue, "Preamble failed")
 	assert.Equal(t, dest.Size, byte(11), "Size failed")
 	assert.Equal(t, dest.Data, []byte("HELLO WORLD"), "Data failed")
 	assert.Equal(t, string(dest.Data), "HELLO WORLD", "Text failed")
@@ -264,7 +264,7 @@ func TestReadWriteFrame(t *testing.T) {
 	close(pinChannel)
 	wait.Wait()
 
-	assert.Equal(t, dest.Preamble, byte(155), "Preamble failed")
+	assert.Equal(t, dest.Preamble, PreambleValue, "Preamble failed")
 	assert.Equal(t, dest.Size, src.Size, "Size failed")
 	assert.Equal(t, dest.Data, src.Data, "Data failed")
 	assert.Equal(t, dest.Checksum, src.Checksum, "Checksum failed")

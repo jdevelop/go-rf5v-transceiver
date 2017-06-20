@@ -15,7 +15,7 @@ const (
 )
 
 type dataFrame struct {
-	Preamble byte
+	Preamble uint32
 	Size     byte
 	Data     []byte
 	Checksum uint32
@@ -31,18 +31,29 @@ type dataFrame struct {
 
 type updateBit func(df *dataFrame, bit bool) updateBit
 
-const PreambleValue = 155
+const PreambleValue = uint32(3078352847)
+
+var PreambleValueBytes = []byte{
+	byte((PreambleValue & 0xFF000000) >> 24),
+	byte((PreambleValue & 0xFF0000) >> 16),
+	byte((PreambleValue & 0xFF00) >> 8),
+	byte(PreambleValue & 0xFF),
+}
 
 func dataF(df *dataFrame, bit bool) updateBit {
 	idx := df.dataBit / 8
-	df.Data[idx] = df.Data[idx] << 1
-	if bit {
-		df.Data[idx] = df.Data[idx] | 1
-	}
-	df.dataBit++
-	if df.dataBit == df.dataBits {
-		df.updateBitF = checksumF
-		df.Stage = Checksum
+	if idx >= uint16(df.Size) {
+		df.Reset()
+	} else {
+		df.Data[idx] = df.Data[idx] << 1
+		if bit {
+			df.Data[idx] = df.Data[idx] | 1
+		}
+		df.dataBit++
+		if df.dataBit == df.dataBits {
+			df.updateBitF = checksumF
+			df.Stage = Checksum
+		}
 	}
 	return df.updateBitF
 }
@@ -71,10 +82,14 @@ func sizeF(df *dataFrame, bit bool) updateBit {
 	}
 	df.sizeBit++
 	if df.sizeBit == 8 {
-		df.Data = make([]byte, df.Size)
-		df.dataBits = uint16(df.Size * 8)
-		df.updateBitF = dataF
-		df.Stage = Data
+		if df.Size <= 0 {
+			df.Reset()
+		} else {
+			df.Data = make([]byte, df.Size)
+			df.dataBits = uint16(df.Size * 8)
+			df.updateBitF = dataF
+			df.Stage = Data
+		}
 	}
 	return df.updateBitF
 }
@@ -139,11 +154,11 @@ func (current *dataFrame) ReadBit(bit bool) bool {
 type BitWriter func(bool)
 
 func (current *dataFrame) WriteFrame(f BitWriter) {
-	size := current.Size + 6 // preamble + size byte + data + checksum
+	size := current.Size + 9 // preamble + size byte + data + checksum
 	dst := make([]byte, size)
-	dst[0] = current.Preamble
-	dst[1] = current.Size
-	copy(dst[2:], current.Data)
+	copy(dst[0:], PreambleValueBytes)
+	dst[4] = current.Size
+	copy(dst[5:], current.Data)
 	dst[size-4] = byte((current.Checksum & 0xFF000000) >> 24)
 	dst[size-3] = byte((current.Checksum & 0xFF0000) >> 16)
 	dst[size-2] = byte((current.Checksum & 0xFF00) >> 8)

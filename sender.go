@@ -33,7 +33,7 @@ func main() {
 		}
 	}
 
-	for i := 1; i < 50; i++ {
+	for i := 1; i < 20; i++ {
 		pin.Set()
 		driver.Sleep()
 		pin.Clear()

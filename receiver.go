@@ -29,7 +29,8 @@ func receive(bps int64, pinNum int) {
 	latch.Add(1)
 
 	go func() {
-		worker := func(evt Event) {
+		for {
+			evt := <-events
 			var state manchester.Edge
 			if evt.pinState {
 				state = manchester.Up
@@ -51,9 +52,6 @@ func receive(bps int64, pinNum int) {
 
 		}
 
-		for {
-			worker(<-events)
-		}
 	}()
 
 	if err = pin.BeginWatch(gpio.EdgeBoth, func() {

@@ -34,7 +34,10 @@ func TestFrame(t *testing.T) {
 	feedByte(&f, 0xfa)
 	assert.Equal(t, f.Stage, Preamble)
 	// feed preamble
-	feedByte(&f, 155)
+	feedByte(&f, 183)
+	feedByte(&f, 123)
+	feedByte(&f, 239)
+	feedByte(&f, 207)
 	assert.Equal(t, f.Stage, Size)
 	// allocate 5 bytes of data
 	feedByte(&f, 5)
