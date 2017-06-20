@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-const bps = 2400
+const bps = 1500
 
 func TestDecoding(t *testing.T) {
 	m := NewManchesterDriver(bps)

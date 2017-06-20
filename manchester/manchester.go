@@ -96,13 +96,12 @@ func NewManchesterDriver(transferSpeed int64) (m Manchester) {
 			time.Sleep(m.SignalT)
 		}
 	} else {
-		localSleepT := m.SignalT / 200
+		localSleepT := m.SignalT / 10000
 		m.sleepF = func() {
 			start := time.Now().UnixNano()
 			for {
 				time.Sleep(localSleepT)
-				diff := time.Now().UnixNano() - start
-				if diff >= m.SignalT.Nanoseconds() {
+				if time.Now().UnixNano()-start >= m.SignalT.Nanoseconds() {
 					break
 				}
 			}
