@@ -92,17 +92,22 @@ func preambleF(df *dataFrame, bit bool) updateBit {
 }
 
 func NewDataFrame() (r dataFrame) {
-	r = dataFrame{
-		Preamble:   0,
-		Size:       0,
-		Data:       nil,
-		Checksum:   0,
-		sizeBit:    0,
-		dataBit:    0,
-		updateBitF: preambleF,
-		Stage:      Preamble,
-	}
+	r = dataFrame{}
+	r.Reset()
 	return r
+}
+
+func (current *dataFrame) Reset() {
+	current.Preamble = 0
+	current.Size = 0
+	current.Data = nil
+	current.Checksum = 0
+	current.sizeBit = 0
+	current.dataBit = 0
+	current.dataBits = 0
+	current.checksumBit = 0
+	current.updateBitF = preambleF
+	current.Stage = Preamble
 }
 
 func BuildDataFrame(data []byte) dataFrame {
@@ -117,9 +122,14 @@ func BuildDataFrame(data []byte) dataFrame {
 	return df
 }
 
-func (r *dataFrame) ReadBit(bit bool) bool {
-	r.updateBitF(r, bit)
-	if r.Stage == Done {
+func (current *dataFrame) IsValid() bool {
+	checksum := crc32.ChecksumIEEE(current.Data)
+	return checksum == current.Checksum
+}
+
+func (current *dataFrame) ReadBit(bit bool) bool {
+	current.updateBitF(current, bit)
+	if current.Stage == Done {
 		return true
 	} else {
 		return false
@@ -128,16 +138,16 @@ func (r *dataFrame) ReadBit(bit bool) bool {
 
 type BitWriter func(bool)
 
-func (r *dataFrame) WriteFrame(f BitWriter) {
-	size := r.Size + 6 // preamble + size byte + data + checksum
+func (current *dataFrame) WriteFrame(f BitWriter) {
+	size := current.Size + 6 // preamble + size byte + data + checksum
 	dst := make([]byte, size)
-	dst[0] = r.Preamble
-	dst[1] = r.Size
-	copy(dst[2:], r.Data)
-	dst[size-4] = byte((r.Checksum & 0xFF000000) >> 24)
-	dst[size-3] = byte((r.Checksum & 0xFF0000) >> 16)
-	dst[size-2] = byte((r.Checksum & 0xFF00) >> 8)
-	dst[size-1] = byte(r.Checksum & 0xFF)
+	dst[0] = current.Preamble
+	dst[1] = current.Size
+	copy(dst[2:], current.Data)
+	dst[size-4] = byte((current.Checksum & 0xFF000000) >> 24)
+	dst[size-3] = byte((current.Checksum & 0xFF0000) >> 16)
+	dst[size-2] = byte((current.Checksum & 0xFF00) >> 8)
+	dst[size-1] = byte(current.Checksum & 0xFF)
 
 	for _, v := range dst {
 		for i := 7; i >= 0; i-- {
