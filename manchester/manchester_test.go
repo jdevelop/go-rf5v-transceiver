@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-const bps = 1000
+const bps = 2400
 
 func TestDecoding(t *testing.T) {
 	m := NewManchesterDriver(bps)
@@ -51,6 +51,9 @@ func TestReadWriteSimpleData(t *testing.T) {
 	m := NewManchesterDriver(bps)
 	r := NewManchesterDriver(bps)
 
+	fmt.Println(m.SignalT)
+	fmt.Println(time.Duration(m.Sensitivity) * time.Nanosecond)
+
 	var recv int64 = 0
 
 	var ch = make(chan bool)
@@ -71,17 +74,15 @@ func TestReadWriteSimpleData(t *testing.T) {
 	go func() {
 		defer wait.Done()
 		for {
-			select {
-			case bit, ok := <-ch:
-				if !ok {
-					break
-				}
-				switch bit {
-				case true:
-					r.ReadBit(Up, time.Now().UnixNano(), reader)
-				case false:
-					r.ReadBit(Down, time.Now().UnixNano(), reader)
-				}
+			bit, ok := <-ch
+			if !ok {
+				break
+			}
+			switch bit {
+			case true:
+				r.ReadBit(Up, time.Now().UnixNano(), reader)
+			case false:
+				r.ReadBit(Down, time.Now().UnixNano(), reader)
 			}
 		}
 	}()

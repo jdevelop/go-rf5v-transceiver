@@ -18,6 +18,8 @@ type Manchester struct {
 	prevBit           bool
 	lastPeriodStartNs int64
 	Sensitivity       int64
+
+	sleepF func()
 }
 
 func (m *Manchester) WriteBit(bit bool, writer Signal) {
@@ -26,17 +28,17 @@ func (m *Manchester) WriteBit(bit bool, writer Signal) {
 			writer(false)
 		}
 		m.prevBit = true
-		time.Sleep(m.SignalT)
+		m.sleepF()
 		writer(true)
-		time.Sleep(m.SignalT)
+		m.sleepF()
 	} else {
 		if !m.prevBit {
 			writer(true)
 		}
 		m.prevBit = false
-		time.Sleep(m.SignalT)
+		m.sleepF()
 		writer(false)
-		time.Sleep(m.SignalT)
+		m.sleepF()
 	}
 }
 
@@ -89,6 +91,23 @@ const PrecisionNs = int64(time.Second / time.Nanosecond)
 
 func NewManchesterDriver(transferSpeed int64) (m Manchester) {
 	m.SignalT = time.Duration(PrecisionNs/transferSpeed/2) * time.Nanosecond
+	if m.SignalT > time.Duration(500)*time.Microsecond {
+		m.sleepF = func() {
+			time.Sleep(m.SignalT)
+		}
+	} else {
+		localSleepT := m.SignalT / 200
+		m.sleepF = func() {
+			start := time.Now().UnixNano()
+			for {
+				time.Sleep(localSleepT)
+				diff := time.Now().UnixNano() - start
+				if diff >= m.SignalT.Nanoseconds() {
+					break
+				}
+			}
+		}
+	}
 	m.lastPeriodStartNs = -1
 	m.Sensitivity = int64(float64(m.SignalT) * 0.6)
 	m.prevBit = false
