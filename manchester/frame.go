@@ -4,43 +4,60 @@ import (
 	"hash/crc32"
 )
 
+// Stage of the packet transformation.
 type Stage string
 
 const (
+	// Preamble stage - expecting the preamble.
 	Preamble Stage = "preamble"
-	Size     Stage = "size"
-	Data     Stage = "data"
+	// Size stage - expecting size bytes.
+	Size Stage = "size"
+	// Data stage - reading data bytes.
+	Data Stage = "data"
+	// Checksum stage - the checksum is expected.
 	Checksum Stage = "checksum"
-	Done     Stage = "done"
+	// Done - the packet is read successfully.
+	Done Stage = "done"
+
+	// PreambleValue the byte value to read from ether.
+	PreambleValue = uint32(3078352847)
 )
 
-type dataFrame struct {
-	Preamble uint32
-	Size     byte
-	Data     []byte
-	Checksum uint32
+type (
+	// DataFrame defines the data frame reader and data container.
+	DataFrame struct {
+		// Preamble the value of the current Preamble.
+		Preamble uint32
+		// Size the number of bytes in the data frame.
+		Size byte
+		// Data the data array.
+		Data []byte
+		// Checksum the checksum of the data slice.
+		Checksum uint32
 
-	Stage Stage
+		Stage Stage
 
-	sizeBit     uint8
-	dataBit     uint16
-	dataBits    uint16
-	checksumBit uint8
-	updateBitF  updateBit
-}
+		sizeBit     uint8
+		dataBit     uint16
+		dataBits    uint16
+		checksumBit uint8
+		updateBitF  updateBit
+	}
 
-type updateBit func(df *dataFrame, bit bool) updateBit
+	updateBit func(df *DataFrame, bit bool) updateBit
 
-const PreambleValue = uint32(3078352847)
+	// BitWriter is the function to use for writing the signal. Could be used as transport.
+	BitWriter func(bool)
+)
 
-var PreambleValueBytes = []byte{
+var preambleValueBytes = []byte{
 	byte((PreambleValue & 0xFF000000) >> 24),
 	byte((PreambleValue & 0xFF0000) >> 16),
 	byte((PreambleValue & 0xFF00) >> 8),
 	byte(PreambleValue & 0xFF),
 }
 
-func dataF(df *dataFrame, bit bool) updateBit {
+func dataF(df *DataFrame, bit bool) updateBit {
 	idx := df.dataBit / 8
 	if idx >= uint16(df.Size) {
 		df.Reset()
@@ -58,11 +75,11 @@ func dataF(df *dataFrame, bit bool) updateBit {
 	return df.updateBitF
 }
 
-func doneF(df *dataFrame, _ bool) updateBit {
+func doneF(df *DataFrame, _ bool) updateBit {
 	return df.updateBitF
 }
 
-func checksumF(df *dataFrame, bit bool) updateBit {
+func checksumF(df *DataFrame, bit bool) updateBit {
 	df.Checksum = df.Checksum << 1
 	if bit {
 		df.Checksum = df.Checksum | 1
@@ -75,7 +92,7 @@ func checksumF(df *dataFrame, bit bool) updateBit {
 	return df.updateBitF
 }
 
-func sizeF(df *dataFrame, bit bool) updateBit {
+func sizeF(df *DataFrame, bit bool) updateBit {
 	df.Size = df.Size << 1
 	if bit {
 		df.Size = df.Size | 1
@@ -94,7 +111,7 @@ func sizeF(df *dataFrame, bit bool) updateBit {
 	return df.updateBitF
 }
 
-func preambleF(df *dataFrame, bit bool) updateBit {
+func preambleF(df *DataFrame, bit bool) updateBit {
 	df.Preamble = df.Preamble << 1
 	if bit {
 		df.Preamble = df.Preamble | 1
@@ -106,26 +123,29 @@ func preambleF(df *dataFrame, bit bool) updateBit {
 	return df.updateBitF
 }
 
-func NewDataFrame() (r dataFrame) {
-	r = dataFrame{}
+// NewDataFrame creates the data frame reader instance.
+func NewDataFrame() *DataFrame {
+	r := DataFrame{}
 	r.Reset()
-	return r
+	return &r
 }
 
-func (current *dataFrame) Reset() {
-	current.Preamble = 0
-	current.Size = 0
-	current.Data = nil
-	current.Checksum = 0
-	current.sizeBit = 0
-	current.dataBit = 0
-	current.dataBits = 0
-	current.checksumBit = 0
-	current.updateBitF = preambleF
-	current.Stage = Preamble
+// Reset resets the data frame reader to initial state.
+func (df *DataFrame) Reset() {
+	df.Preamble = 0
+	df.Size = 0
+	df.Data = nil
+	df.Checksum = 0
+	df.sizeBit = 0
+	df.dataBit = 0
+	df.dataBits = 0
+	df.checksumBit = 0
+	df.updateBitF = preambleF
+	df.Stage = Preamble
 }
 
-func BuildDataFrame(data []byte) dataFrame {
+// BuildDataFrame builds the data frame from the byte slice.
+func BuildDataFrame(data []byte) *DataFrame {
 	checksum := crc32.ChecksumIEEE(data)
 	df := NewDataFrame()
 	df.Preamble = PreambleValue
@@ -137,32 +157,29 @@ func BuildDataFrame(data []byte) dataFrame {
 	return df
 }
 
-func (current *dataFrame) IsValid() bool {
-	checksum := crc32.ChecksumIEEE(current.Data)
-	return checksum == current.Checksum
+// IsValid verifies that the data frame content matches the checksum.
+func (df *DataFrame) IsValid() bool {
+	checksum := crc32.ChecksumIEEE(df.Data)
+	return checksum == df.Checksum
 }
 
-func (current *dataFrame) ReadBit(bit bool) bool {
-	current.updateBitF(current, bit)
-	if current.Stage == Done {
-		return true
-	} else {
-		return false
-	}
+// ReadBit the callback function to update the state of the bit operation. Returns true when the data frame read is complete.
+func (df *DataFrame) ReadBit(bit bool) bool {
+	df.updateBitF(df, bit)
+	return df.Stage == Done
 }
 
-type BitWriter func(bool)
-
-func (current *dataFrame) WriteFrame(f BitWriter) {
-	size := current.Size + 9 // preamble + size byte + data + checksum
+// WriteFrame writes the data frame using the passed writer function as a transport.
+func (df *DataFrame) WriteFrame(f BitWriter) {
+	size := df.Size + 9 // preamble + size byte + data + checksum
 	dst := make([]byte, size)
-	copy(dst[0:], PreambleValueBytes)
-	dst[4] = current.Size
-	copy(dst[5:], current.Data)
-	dst[size-4] = byte((current.Checksum & 0xFF000000) >> 24)
-	dst[size-3] = byte((current.Checksum & 0xFF0000) >> 16)
-	dst[size-2] = byte((current.Checksum & 0xFF00) >> 8)
-	dst[size-1] = byte(current.Checksum & 0xFF)
+	copy(dst[0:], preambleValueBytes)
+	dst[4] = df.Size
+	copy(dst[5:], df.Data)
+	dst[size-4] = byte((df.Checksum & 0xFF000000) >> 24)
+	dst[size-3] = byte((df.Checksum & 0xFF0000) >> 16)
+	dst[size-2] = byte((df.Checksum & 0xFF00) >> 8)
+	dst[size-1] = byte(df.Checksum & 0xFF)
 
 	for _, v := range dst {
 		for i := 7; i >= 0; i-- {

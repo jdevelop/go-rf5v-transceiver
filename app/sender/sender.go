@@ -1,10 +1,10 @@
 package main
 
 import (
-	"github.com/jdevelop/go-manchester/manchester"
-	"github.com/davecheney/gpio"
-	"fmt"
 	"flag"
+	"fmt"
+	"github.com/davecheney/gpio"
+	"github.com/jdevelop/go-manchester/manchester"
 )
 
 func main() {

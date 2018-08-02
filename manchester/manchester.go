@@ -4,15 +4,23 @@ import (
 	"time"
 )
 
-type Signal func(bool)
-
-type Edge uint8
-
-const (
-	Down Edge = iota
-	Up
+type (
+	// Signal function type to send the bit to the transport level.
+	Signal func(bool)
+	// Edge integer type thar represents the value of the Edge. Could be Up or Down.
+	Edge uint8
 )
 
+const (
+	// Down falling edge
+	Down Edge = iota
+	// Up rising edge
+	Up
+	// PrecisionNs helper function to calculate the multiplier for the nanosecond precision.
+	PrecisionNs = int64(time.Second / time.Nanosecond)
+)
+
+// Manchester the data driver for the manchester encoding function.
 type Manchester struct {
 	SignalT           time.Duration
 	prevBit           bool
@@ -22,6 +30,10 @@ type Manchester struct {
 	Sleep func()
 }
 
+// WriteBit writes the bit of the data with the given delay based on the previous bit value.
+//
+// 	bit the bit value (true = 1, false = 0)
+// 	writer the function that writes the bit value to the underlying transport.
 func (m *Manchester) WriteBit(bit bool, writer Signal) {
 	if bit {
 		if m.prevBit {
@@ -57,6 +69,11 @@ func intervalMultiplierRounded(m *Manchester, currentTimeNs int64) int {
 	return dur
 }
 
+// ReadBit reads the bit based on the curent edge and current timing.
+//
+//	edge the detected Edge
+//	currentTimeNs current time in nanoseconds
+// 	callback the callback function to report the bit.
 func (m *Manchester) ReadBit(edge Edge, currentTimeNs int64, callback Signal) {
 
 	updater := func(s bool) {
@@ -87,9 +104,11 @@ func (m *Manchester) ReadBit(edge Edge, currentTimeNs int64, callback Signal) {
 	}
 }
 
-const PrecisionNs = int64(time.Second / time.Nanosecond)
-
-func NewManchesterDriver(transferSpeed int64) (m Manchester) {
+// NewManchesterDriver creates the instance of Manchester encoder.
+//
+//	transferSpeed the transfer speedm bytes per second.
+func NewManchesterDriver(transferSpeed int64) *Manchester {
+	m := Manchester{}
 	m.SignalT = time.Duration(PrecisionNs/transferSpeed/2) * time.Nanosecond
 	if m.SignalT > time.Duration(500)*time.Microsecond {
 		m.Sleep = func() {
@@ -110,5 +129,5 @@ func NewManchesterDriver(transferSpeed int64) (m Manchester) {
 	m.lastPeriodStartNs = -1
 	m.Sensitivity = int64(float64(m.SignalT) * 0.6)
 	m.prevBit = false
-	return m
+	return &m
 }
